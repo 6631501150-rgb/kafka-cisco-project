@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cisco Command Console</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --card: #ffffff;
+      --text: #1d2433;
+      --muted: #6b7385;
+      --border: #dde2ea;
+      --accent: #1b6ac9;
+      --accent-hover: #1557a6;
+      --ok: #1f8a4c;
+      --err: #c43a3a;
+      --code-bg: #0f1724;
+      --code-text: #d6e2f0;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #11151c;
+        --card: #1a2029;
+        --text: #e4e8ef;
+        --muted: #8d96a8;
+        --border: #2c3442;
+        --accent: #4b8ee6;
+        --accent-hover: #6aa3ee;
+        --ok: #3cc077;
+        --err: #e06464;
+        --code-bg: #0b0f15;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Noto Sans Thai", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--card);
+    }
+    header h1 { font-size: 18px; margin: 0; }
+    .status { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+    .dot.ok { background: var(--ok); }
+    .dot.err { background: var(--err); }
+    main {
+      max-width: 1100px;
+      margin: 24px auto;
+      padding: 0 16px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 20px;
+    }
+    @media (max-width: 820px) { main { grid-template-columns: minmax(0, 1fr); } }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+    }
+    .card h2 { font-size: 15px; margin: 0 0 16px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 14px;
+      color: var(--text);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 14px;
+    }
+    input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+    #command { font-family: Consolas, "Cascadia Mono", monospace; }
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; margin: -6px 0 16px; }
+    .preset {
+      font: 12px Consolas, "Cascadia Mono", monospace;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+    }
+    .preset:hover { border-color: var(--accent); color: var(--accent); }
+    button.primary {
+      width: 100%;
+      padding: 11px;
+      font: inherit;
+      font-weight: 600;
+      color: #fff;
+      background: var(--accent);
+      border: 0;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button.primary:hover { background: var(--accent-hover); }
+    button.primary:disabled { opacity: .6; cursor: wait; }
+    .alert { font-size: 13px; padding: 10px 12px; border-radius: 6px; margin-top: 14px; display: none; }
+    .alert.ok { display: block; color: var(--ok); border: 1px solid var(--ok); }
+    .alert.err { display: block; color: var(--err); border: 1px solid var(--err); }
+    .note { font-size: 12px; color: var(--muted); margin-top: 14px; line-height: 1.5; }
+    pre {
+      margin: 0;
+      padding: 14px;
+      background: var(--code-bg);
+      color: var(--code-text);
+      border-radius: 6px;
+      font: 12.5px/1.5 Consolas, "Cascadia Mono", monospace;
+      overflow-x: auto;
+      min-height: 120px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .history { grid-column: 1 / -1; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    th { color: var(--muted); font-weight: 500; }
+    td.mono { font-family: Consolas, "Cascadia Mono", monospace; }
+    .empty { color: var(--muted); font-size: 13px; }
+    .result-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 13px; min-width: 0; }
+    .result-meta .mono { font-family: Consolas, "Cascadia Mono", monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .badge {
+      flex: none;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--muted);
+      color: var(--muted);
+    }
+    .badge.pending, .badge.running { color: var(--accent); border-color: var(--accent); }
+    .badge.success { color: var(--ok); border-color: var(--ok); }
+    .badge.failed, .badge.timeout { color: var(--err); border-color: var(--err); }
+    #output { min-height: 260px; max-height: 520px; overflow-y: auto; white-space: pre; word-break: normal; }
+    details { margin-top: 12px; font-size: 13px; color: var(--muted); }
+    details summary { cursor: pointer; margin-bottom: 8px; }
+    details pre { min-height: 0; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: var(--bg); }
+    tbody tr.selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Cisco Command Console</h1>
+    <div class="status">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusText">กำลังตรวจสอบ API...</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>ส่งคำสั่งไปยัง Router</h2>
+      <form id="commandForm">
+        <label for="routerIp">Router IP</label>
+        <input id="routerIp" name="router_ip" value="192.168.6.10" required
+               pattern="^((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)$"
+               title="กรอก IPv4 เช่น 192.168.6.10">
+
+        <label for="command">Command</label>
+        <input id="command" name="command" value="show ip interface brief" required autocomplete="off">
+
+        <div class="presets">
+          <button type="button" class="preset">show ip interface brief</button>
+          <button type="button" class="preset">show version</button>
+          <button type="button" class="preset">show running-config</button>
+          <button type="button" class="preset">show ip route</button>
+          <button type="button" class="preset">show vlan brief</button>
+        </div>
+
+        <button type="submit" class="primary" id="submitBtn">ส่งคำสั่ง</button>
+      </form>
+      <div class="alert" id="alert"></div>
+      <p class="note">
+        คำสั่งจะถูกส่งเข้า Kafka topic <code>cisco-commands</code> แล้ว <code>worker.py</code>
+        จะ SSH ไปรันที่ router แล้วส่งผลกลับมาทาง topic <code>cisco-results</code> ผลลัพธ์จะขึ้นด้านขวาเมื่อรันเสร็จ
+      </p>
+    </section>
+
+    <section class="card">
+      <h2>ผลลัพธ์จาก Router</h2>
+      <div class="result-meta">
+        <span class="badge" id="resultBadge">-</span>
+        <span class="mono" id="resultTitle">ยังไม่มีการส่งคำสั่ง</span>
+      </div>
+      <pre id="output"></pre>
+      <details>
+        <summary>Kafka response</summary>
+        <pre id="response">-</pre>
+      </details>
+    </section>
+
+    <section class="card history">
+      <h2>ประวัติการส่ง (เฉพาะหน้านี้ · คลิกแถวเพื่อดูผล)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>เวลา</th>
+              <th>Router</th>
+              <th>Command</th>
+              <th>สถานะ</th>
+              <th>Offset</th>
+              <th>Event ID</th>
+            </tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+      <p class="empty" id="historyEmpty">ยังไม่มีประวัติ</p>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById("commandForm");
+    const routerIp = document.getElementById("routerIp");
+    const command = document.getElementById("command");
+    const submitBtn = document.getElementById("submitBtn");
+    const alertBox = document.getElementById("alert");
+    const responseBox = document.getElementById("response");
+    const outputBox = document.getElementById("output");
+    const resultBadge = document.getElementById("resultBadge");
+    const resultTitle = document.getElementById("resultTitle");
+
+    const POLL_INTERVAL_MS = 1500;
+    const POLL_TIMEOUT_MS = 90000;
+    const STATUS_LABELS = {
+      pending: "รอ worker",
+      running: "กำลังรัน",
+      success: "สำเร็จ",
+      failed: "ล้มเหลว",
+      timeout: "ไม่มีผลตอบกลับ",
+    };
+    const DONE = new Set(["success", "failed", "timeout"]);
+
+    // event_id -> { event, kafkaResponse, result, row, sentAt }
+    const jobs = new Map();
+    let selectedId = null;
+    const historyBody = document.getElementById("historyBody");
+    const historyEmpty = document.getElementById("historyEmpty");
+
+    document.querySelectorAll(".preset").forEach(btn => {
+      btn.addEventListener("click", () => {
+        command.value = btn.textContent;
+        command.focus();
+      });
+    });
+
+    function showAlert(type, text) {
+      alertBox.className = "alert " + type;
+      alertBox.textContent = text;
+    }
+
+    async function checkHealth() {
+      const dot = document.getElementById("statusDot");
+      const text = document.getElementById("statusText");
+      try {
+        const res = await fetch("/health");
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        dot.className = "dot ok";
+        text.textContent = `API พร้อมใช้งาน · Kafka ${data.kafka} · topic ${data.topic}`;
+      } catch (e) {
+        dot.className = "dot err";
+        text.textContent = "เชื่อมต่อ API ไม่ได้";
+      }
+    }
+
+    function statusOf(job) {
+      return job.result ? job.result.status : "pending";
+    }
+
+    function renderBadge(el, status) {
+      el.className = "badge " + status;
+      el.textContent = STATUS_LABELS[status] || status;
+    }
+
+    function renderSelected() {
+      const job = jobs.get(selectedId);
+      if (!job) return;
+
+      const status = statusOf(job);
+      renderBadge(resultBadge, status);
+      resultTitle.textContent = `${job.event.router_ip} › ${job.event.command}`;
+      responseBox.textContent = JSON.stringify(job.kafkaResponse, null, 2);
+
+      if (status === "success") {
+        outputBox.textContent = job.result.output.trim() || "(ไม่มี output)";
+      } else if (status === "failed") {
+        outputBox.textContent = [job.result.error, job.result.output].filter(Boolean).join("\n\n");
+      } else if (status === "timeout") {
+        outputBox.textContent = "ไม่ได้รับผลจาก worker ภายใน 90 วินาที\nตรวจสอบว่า worker ทำงานอยู่: docker compose logs -f worker";
+      } else if (status === "running") {
+        outputBox.textContent = "worker กำลัง SSH ไปที่ router...";
+      } else {
+        outputBox.textContent = "ส่งเข้า Kafka แล้ว รอ worker รับงาน...";
+      }
+
+      historyBody.querySelectorAll("tr").forEach(tr => tr.classList.toggle("selected", tr === job.row));
+    }
+
+    function select(eventId) {
+      selectedId = eventId;
+      renderSelected();
+    }
+
+    function addHistory(data) {
+      const row = document.createElement("tr");
+      const cells = [
+        [new Date(data.event.created_at).toLocaleString(), ""],
+        [data.event.router_ip, "mono"],
+        [data.event.command, "mono"],
+        [null, ""],
+        [data.kafka.offset, ""],
+        [data.event.event_id, "mono"],
+      ];
+      for (const [value, cls] of cells) {
+        const td = document.createElement("td");
+        if (value === null) {
+          const badge = document.createElement("span");
+          td.appendChild(badge);
+        } else {
+          td.textContent = value;
+        }
+        if (cls) td.className = cls;
+        row.appendChild(td);
+      }
+      row.addEventListener("click", () => select(data.event.event_id));
+      historyBody.prepend(row);
+      historyEmpty.style.display = "none";
+
+      jobs.set(data.event.event_id, {
+        event: data.event,
+        kafkaResponse: data,
+        result: null,
+        row,
+        sentAt: Date.now(),
+      });
+      updateRow(data.event.event_id);
+    }
+
+    function updateRow(eventId) {
+      const job = jobs.get(eventId);
+      renderBadge(job.row.querySelector("td:nth-child(4) span"), statusOf(job));
+      if (eventId === selectedId) renderSelected();
+    }
+
+    async function pollResults() {
+      for (const [eventId, job] of jobs) {
+        if (DONE.has(statusOf(job))) continue;
+
+        if (Date.now() - job.sentAt > POLL_TIMEOUT_MS) {
+          job.result = { status: "timeout", output: "", error: "" };
+          updateRow(eventId);
+          continue;
+        }
+
+        try {
+          const res = await fetch(`/api/commands/${encodeURIComponent(eventId)}`);
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (data.status !== "pending") {
+            job.result = data;
+            updateRow(eventId);
+          }
+        } catch {
+          // API unreachable, try again on the next tick
+        }
+      }
+    }
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      submitBtn.disabled = true;
+      submitBtn.textContent = "กำลังส่ง...";
+      alertBox.className = "alert";
+
+      try {
+        const res = await fetch("/api/commands", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            router_ip: routerIp.value.trim(),
+            command: command.value.trim(),
+          }),
+        });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = text; }
+
+        if (!res.ok) {
+          responseBox.textContent = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+          showAlert("err", `ส่งไม่สำเร็จ (HTTP ${res.status})`);
+          return;
+        }
+        showAlert("ok", `ส่งเข้า Kafka แล้ว · partition ${data.kafka.partition} · offset ${data.kafka.offset}`);
+        addHistory(data);
+        select(data.event.event_id);
+      } catch (err) {
+        showAlert("err", "เชื่อมต่อ API ไม่ได้: " + err.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "ส่งคำสั่ง";
+      }
+    });
+
+    checkHealth();
+    setInterval(checkHealth, 15000);
+
+    async function pollLoop() {
+      await pollResults();
+      setTimeout(pollLoop, POLL_INTERVAL_MS);
+    }
+    pollLoop();
+  </script>
+</body>
+</html>

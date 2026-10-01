@@ -1,6 +1,6 @@
 import paramiko
 
-ip = "192.168.6.129"
+ip = "192.168.6.10"
 username = "admin"
 password = "cisco"
 

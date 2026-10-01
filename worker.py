@@ -1,18 +1,22 @@
-from kafka import KafkaConsumer
+from kafka import KafkaConsumer, KafkaProducer
 import paramiko
 import json
+import os
+from datetime import datetime, timezone
 
-KAFKA_BOOTSTRAP = "localhost:29092"
-TOPIC = "cisco-commands"
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:29092")
+TOPIC = os.getenv("KAFKA_TOPIC", "cisco-commands")
+RESULT_TOPIC = os.getenv("KAFKA_RESULT_TOPIC", "cisco-results")
+GROUP_ID = os.getenv("WORKER_GROUP_ID", "cisco-worker-test-v2")
 
-ROUTER_USERNAME = "admin"
-ROUTER_PASSWORD = "cisco"
+ROUTER_USERNAME = os.getenv("ROUTER_USERNAME", "admin")
+ROUTER_PASSWORD = os.getenv("ROUTER_PASSWORD", "cisco")
 
 
 consumer = KafkaConsumer(
     TOPIC,
     bootstrap_servers=KAFKA_BOOTSTRAP,
-    group_id="cisco-worker-test-v2",
+    group_id=GROUP_ID,
     auto_offset_reset="latest",
     enable_auto_commit=True,
     value_deserializer=lambda value: json.loads(
@@ -20,9 +24,32 @@ consumer = KafkaConsumer(
     ),
 )
 
+producer = KafkaProducer(
+    bootstrap_servers=KAFKA_BOOTSTRAP,
+    value_serializer=lambda value: json.dumps(value).encode("utf-8"),
+)
+
+
+def publish_result(event, status, output="", error=""):
+    producer.send(
+        RESULT_TOPIC,
+        value={
+            "event_id": event["event_id"],
+            "router_ip": event["router_ip"],
+            "command": event["command"],
+            "status": status,
+            "output": output,
+            "error": error,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    producer.flush()
+
 
 def execute_cisco_command(router_ip, command):
     transport = None
+    output = ""
+    error = ""
 
     try:
         print(f"\nConnecting to {router_ip}...")
@@ -85,7 +112,9 @@ def execute_cisco_command(router_ip, command):
         ssh.close()
 
     except Exception as e:
-        print(f"SSH ERROR: {repr(e)}")
+        error = f"SSH ERROR: {repr(e)}"
+        print(error)
+        return False, output, error
 
     finally:
         if transport:
@@ -93,12 +122,15 @@ def execute_cisco_command(router_ip, command):
 
         print("Connection closed")
 
+    return not error, output, error
+
 
 print("================================")
 print("Cisco Kafka Worker Started")
 print("================================")
 print(f"Kafka : {KAFKA_BOOTSTRAP}")
 print(f"Topic : {TOPIC}")
+print(f"Result: {RESULT_TOPIC}")
 print("Waiting for Kafka events...")
 
 
@@ -114,7 +146,11 @@ for message in consumer:
     print(f"Router   : {event['router_ip']}")
     print(f"Command  : {event['command']}")
 
-    execute_cisco_command(
+    publish_result(event, "running")
+
+    success, output, error = execute_cisco_command(
         event["router_ip"],
         event["command"]
     )
+
+    publish_result(event, "success" if success else "failed", output, error)

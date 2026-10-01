@@ -1,10 +1,11 @@
 from kafka import KafkaProducer
 import json
 import uuid
+import os
 from datetime import datetime, timezone
 
-KAFKA_BOOTSTRAP = "localhost:29092"
-TOPIC = "cisco-commands"
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:29092")
+TOPIC = os.getenv("KAFKA_TOPIC", "cisco-commands")
 
 producer = KafkaProducer(
     bootstrap_servers=KAFKA_BOOTSTRAP,
@@ -35,7 +36,7 @@ if __name__ == "__main__":
 
     send_cisco_command(
         command="show ip interface brief",
-        router_ip="192.168.6.129",
+        router_ip="192.168.6.10",
     )
 
     producer.flush()
